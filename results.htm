@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang=“en”>
+  <head>
+    <meta charset=“UTF-8” />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" type="text/css" href="bootstrap-sortable.css"/>
+    <link rel="stylesheet" type="text/css" href="bootstrap.min.css" />
+    <title>Nikki Ranking Helper</title>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Nikki Ranking Helper</h1>
+      <p class="lead">Basic grid layouts to get you familiar with building within the Bootstrap grid system.</p>
+
+      <h3>Five grid tiers</h3>
+      <p>There are five tiers to the Bootstrap grid system, one for each range of devices we support. Each tier starts at a minimum viewport size and automatically applies to the larger devices unless overridden.</p>
+
+      <div class="main">
+        <table class="table sortable">
+          <thead>
+            <tr>
+              <th scope="col">Chapter</th>
+              <th scope="col">New Items</th>
+              <th scope="col">Max Base Score</th>
+              <th scope="col">Own Score</th>
+              <th scope="col">Difference</th>
+              <th scope="col">Last Updated</th>
+            </tr>
+          </thead>
+          <tbody class="tableContent" id="tableContent">
+          </tbody>
+        </table>
+      </div>
+    </div> <!-- /container -->
+    <script type="text/javascript" src="jquery.min.js"></script>
+    <script type="text/javascript" src="bootstrap-sortable.js"></script>
+    <script type="text/javascript" src="calculate.js"></script>
+  </body>
+</html>
