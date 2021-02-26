@@ -22,7 +22,7 @@
 		},
 		{
 			"matches": ["https://*/results.htm"],
-			"css": ["grid.css", "bootstrap.min.css", "bootstrap-sortable.css"],
+			"css": ["bootstrap.min.css", "bootstrap-sortable.css"],
 			"js": ["calculate.js", "jquery.min.js", "bootstrap-sortable.js"]
 		}
 	]

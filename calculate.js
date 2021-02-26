@@ -2,15 +2,23 @@
 const now = new Date();
 const localStorage = window.localStorage;
 
-const storageSet = (key, value) => {
+function storageSet(key, value) {
 	chrome.storage.sync.set({[key]: value}, function() {
-		console.log(`[SET] ${key} is set to ${value}`);
-	}); 
+		console.log(`[SET] ${key} -> ${value}`);
+	});
 }
 
-const storageGet = (key) => {
-	chrome.storage.sync.get([key], function(result) {
-		console.log(`[GET] ${key} is set to ${result.key}`);
+function storageGet(key, callback) {
+	chrome.storage.sync.get([key], (result) => {
+		console.log(`[GET] ${key} <- ${result[key]}`);
+		callback(result[key]);
+	});
+}
+
+function storageGetMultiple(keys, callback) {
+	chrome.storage.sync.get(keys, (result) => {
+		console.log(`[GET] ${keys} <- ${result}`);
+		callback(result);
 	});
 }
 
@@ -145,7 +153,7 @@ class Chapter {
 			storageSet(`${this.ownScoreParam}_maxBaseScore`, this.maxBaseScore);
 			storageSet(`${this.ownScoreParam}_ownScore`, this.ownScore);
 			storageSet(`${this.ownScoreParam}_lastRefreshed`, now.toString());
-			callback(renderRow(this.createChapterLink(), this.newItems, this.maxBaseScore, this.ownScore, now.toString()))
+			callback(renderRow(this.createChapterLink(), this.newItems, this.maxBaseScore, this.ownScore, now))
 			$.bootstrapSortable({ applyLast: true })
 		})
 		.catch((error) => console.log(`Failed to get own chapter score on ${this.stageParam}: ${error}`));
@@ -166,17 +174,24 @@ class Chapter {
 	}
 
 	addRow = (callback) => {
-		const lastRefreshed = storageGet(`${this.ownScoreParam}_lastRefreshed`);
-		if (lastRefreshed && lastRefreshed !== undefined && lastRefreshed !== 'undefined') {
-			const hoursSinceLastRefreshed = Math.abs(now - Date.parse(lastRefreshed)) / 36e5;
-			if (hoursSinceLastRefreshed <= 120) {
-				const newItems = storageGet(`${this.ownScoreParam}_newItems`);
-				const maxBaseScore = storageGet(`${this.ownScoreParam}_maxBaseScore`);
-				const ownScore = storageGet(`${this.ownScoreParam}_ownScore`);
-				return callback(renderRow(this.createChapterLink(), newItems, maxBaseScore, ownScore, lastRefreshed));
+		storageGet(`${this.ownScoreParam}_lastRefreshed`, (lastRefreshed) => {
+			if (lastRefreshed) {
+				const lastRefreshedAsDate = Date.parse(lastRefreshed);
+				const daysSinceLastRefreshed = (now - lastRefreshedAsDate) / (1000 * 60 * 60 * 24);
+				if (daysSinceLastRefreshed <= 5) {
+					console.log("I am inside here")
+					const newItemsKey = `${this.ownScoreParam}_newItems`;
+					const maxBaseScoreKey = `${this.ownScoreParam}_maxBaseScore`;
+					const ownScoreKey = `${this.ownScoreParam}_ownScore`;
+					return storageGetMultiple([newItemsKey, maxBaseScoreKey, ownScoreKey],
+						(result) => {
+							callback(renderRow(this.createChapterLink(), result[newItemsKey], result[maxBaseScoreKey], result[ownScoreKey], lastRefreshedAsDate));
+							$.bootstrapSortable({ applyLast: true })
+						});
+				}
 			}
-		}
-		return this.getData(callback);
+			this.getData(callback);
+		});
 	}
 }
 
