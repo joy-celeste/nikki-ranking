@@ -8,13 +8,6 @@ function storageSet(key, value) {
 	});
 }
 
-function storageGet(key, callback) {
-	chrome.storage.sync.get([key], (result) => {
-		console.log(`[GET] ${key} <- ${result[key]}`);
-		callback(result[key]);
-	});
-}
-
 function storageGetMultiple(keys, callback) {
 	chrome.storage.sync.get(keys, (result) => {
 		console.log(`[GET] ${keys} <- ${result}`);
@@ -22,33 +15,120 @@ function storageGetMultiple(keys, callback) {
 	});
 }
 
-class Chapter {
-  constructor(volume, chapter, stage, isPrincess=true, isCommission=false) {
-		this.volume = volume;
-    	this.chapter = chapter;
-		this.stage = stage;
-		this.isPrincess = isPrincess;
-		this.isCommission = isCommission;
+function storageGet(key, callback) {
+	chrome.storage.sync.get([key], (result) => {
+		console.log(`[GET] ${key} <- ${result[key]}`);
+		callback(result[key]);
+	});
+}
+
+function fetchData(referrer, body) {
+	return {
+		"headers": {
+			"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+			"accept-language": "en-US,en;q=0.9",
+			"sec-fetch-dest": "document",
+			"sec-fetch-mode": "navigate",
+			"sec-fetch-site": "same-origin",
+			"sec-fetch-user": "?1",
+			"upgrade-insecure-requests": "1"
+		},
+		"referrer": referrer ?? `https://ln.nikkis.info/`,
+		"referrerPolicy": "strict-origin-when-cross-origin",
+		"body": body,
+		"method": body ? "POST" : "GET",
+		"mode": "cors",
+		"credentials": "include"
+	}
+}
+
+class Table {
+	constructor(tableContent) {
+		this.tableContent = tableContent;
+		this.cache = {}
+	};
+
+	getChapterList(stageType) { // 'commission' or 'chapters'
+		fetch(`https://ln.nikkis.info/stages/${stageType}/`, fetchData())
+		.then(r => r.text())
+		.then(result => {
+			var parser = new DOMParser();
+			var doc = parser.parseFromString(result, 'text/html');
+			var nodes = [...doc.querySelectorAll('.pink-text.text-lighten-3')];
+			// var chapters = new Set(nodes.map(node => node.href.split("/").pop()));
+			var chapters = nodes.map(node => node.href.split("/").pop());
+			chapters.forEach((stageString) => {
+				let stage = new Stage(stageType, stageString, true, (key, value) => this.addToCache(key, value), this.cache)
+				stage.getData((row) => this.tableContent.append(row))
+			})
+		});
+	};
+
+	addToCache(key, value) {
+		this.cache[key] = value
+	};
+
+	renderTable = async function() {
+		storageGetMultiple(['nikki-ranking-last-refresh', 'nikki-ranking'], (result) => {
+			const lastRefresh = result['nikki-ranking-last-refresh']
+			const cachedResults = result['nikki-ranking']
+			console.log("From the cache, we got: ", lastRefresh, cachedResults)
+
+			if (lastRefresh && Object.keys(cachedResults).length !== 0) {
+				const lastRefreshedAsDate = new Date(lastRefresh);
+				const daysSinceLastRefreshed = (now - lastRefreshedAsDate) / (1000 * 60 * 60 * 24);
+				console.log("daysSinceLastRefreshed", daysSinceLastRefreshed)
+
+				if (daysSinceLastRefreshed <= 7) {
+					for (let [key, storedValue] of Object.entries(cachedResults)) {
+						const stageType = key.substring(0, 7) === 'chapter' ? 'chapters' : 'commission';
+						const keySplit = key.split("_");
+						const isPrincess = keySplit[1] === 'princess';
+						let stageString = keySplit.pop();
+
+						if (keySplit.pop() === 'V2') {
+							stageString = `V2_${stageString}`
+						}
+						let stage = new Stage(stageType, stageString, isPrincess, (key, value) => addToCache(key, value), this.cache)
+						stage.addRow((row) => this.tableContent.append(row), storedValue)
+					}
+					return;
+				}
+			}
+			this.getChapterList('commission');
+			this.getChapterList('chapters');
+			storageSet('nikki-ranking-last-refresh', now.getTime());
+			return;
+		})
+
+		storageGet('nikki-ranking-last-refresh', (lastRefresh) => {
+			const lastUpdated = document.getElementById('last-updated');
+			const lastRefreshedAsDate = new Date(lastRefresh);
+			lastUpdated.innerText = `Last updated: ${lastRefreshedAsDate.toLocaleDateString()} ${lastRefreshedAsDate.toLocaleTimeString()}`;
+		});
+	}
+}
+
+class Stage {
+  constructor(stageType, stageString, isPrincess, cacheCallback, cache) {
+		this.stageType = stageType; // 'commission' or 'chapters'
+    	this.stageString = stageString;
+		this.chapterType = isPrincess ? 'princess' : 'maiden';
+		this.cacheCallback = cacheCallback;
+		this.cacheReference = cache;
   }
 
 	get ownScoreParam() {
-		const stageOrComm = this.isCommission ? 'commission' : 'chapter';
-		const stageType = this.isCommission ? 'common' : this.isPrincess ? 'princess' : 'maiden';
-		const volume = this.volume === 2 ? 'V2' : '';
-		const chapterStage = `${this.chapter}-${this.stage}`;
-		return [stageOrComm, stageType, volume, chapterStage].filter((x) => x).join('_');
+		const stageType = this.stageType === 'commission' ? 'commission' : 'chapter';
+		const chapterType = this.stageType === 'commission' ? 'common' : this.chapterType;
+		return [stageType, chapterType, this.stageString].filter((x) => x).join('_');
 	}
 	
 	get topScoreURI() {
-		const stageOrComm = this.isCommission ? 'commission' : 'chapters';
-		const stageType = this.isPrincess ? 'princess' : 'maiden';
-		const v2 = this.volume === 2 ? 'V2_' : '';
-		const chapterStage = `${v2}${this.chapter}-${this.stage}`;
-
-		if (this.isCommission) {
-			return `https://ln.nikkis.info/stages/${stageOrComm}/${chapterStage}`
+		if (this.stageType === 'commission') {
+			return `https://ln.nikkis.info/stages/commission/${this.stageString}`
 		} else {
-			return `https://ln.nikkis.info/stages/${stageOrComm}/${stageType}/${chapterStage}`
+			return `https://ln.nikkis.info/stages/chapters/${this.chapterType}/${this.stageString}`
 		}
 	}
 
@@ -62,24 +142,7 @@ class Chapter {
 	}
 
 	getChapterTopScore(callback) {
-		const stageOrComm = this.isCommission ? 'commission' : 'chapters';
-		fetch(this.topScoreURI, {
-			"headers": {
-				"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-				"accept-language": "en-US,en;q=0.9",
-				"sec-fetch-dest": "document",
-				"sec-fetch-mode": "navigate",
-				"sec-fetch-site": "same-origin",
-				"sec-fetch-user": "?1",
-				"upgrade-insecure-requests": "1"
-			},
-			"referrer": `https://ln.nikkis.info/stages/${stageOrComm}/`,
-			"referrerPolicy": "strict-origin-when-cross-origin",
-			"body": null,
-			"method": "GET",
-			"mode": "cors",
-			"credentials": "include"
-		})
+		fetch(this.topScoreURI, fetchData(`https://ln.nikkis.info/stages/${this.stageType}/`))
 		.then(r => r.text())
 		.then(result => {
 				// Convert the HTML string into a document object
@@ -93,67 +156,21 @@ class Chapter {
 		});
 	}
 
-	getChapterExpertScore = (callback) => {
-		fetch("https://my.nikkis.info/expertguide/ln", {
-			"headers": {
-				"accept": "application/json, text/javascript, */*; q=0.01",
-				"accept-language": "en-US,en;q=0.9",
-				"content-type": "application/json; charset=UTF-8",
-				"sec-fetch-dest": "empty",
-				"sec-fetch-mode": "cors",
-				"sec-fetch-site": "same-site"
-			},
-			"referrer": "https://beta.nikkis.info/",
-			"referrerPolicy": "strict-origin-when-cross-origin",
-			"body": `{\"stage\":\"${this.ownScoreParam}\",\"setting\":\"custom\"}`,
-			"method": "POST",
-			"mode": "cors",
-			"credentials": "include"
-		})
-		.then(r => r.text())
-		.then(result => {
-			console.log(`Tried stage (expert): ${this.ownScoreParam}`);
-			const initialResult = JSON.parse(result); // {guide: {wardrobe: {...}, score: "128,000"}
-			this.newExpertItems = this.getNumNewItems(initialResult.guide.wardrobe);
-			const score = initialResult.guide.score; // "128,000"
-			const scoreAsNum = this.parseNum(score); // "128,000" -> "128000" -> 128000
-			this.ownExpertScore = scoreAsNum;
-			console.log("newExpertItems", this.newExpertItems, "ownExpertScore", this.ownExpertScore)
-		})
-		.catch((error) => console.log(`Failed to get expert chapter score on ${this.stageParam}: ${error}`));
-	}
-
 	getChapterOwnScore = (callback) => {
-		fetch("https://my.nikkis.info/getguide/ln", {
-			"headers": {
-					"accept": "application/json, text/javascript, */*; q=0.01",
-					"accept-language": "en-US,en;q=0.9",
-					"content-type": "application/json; charset=UTF-8",
-					"sec-fetch-dest": "empty",
-					"sec-fetch-mode": "cors",
-					"sec-fetch-site": "same-site"
-			},
-			"referrer": "https://ln.nikkis.info/",
-			"referrerPolicy": "strict-origin-when-cross-origin",
-			"body": `{\"stage\":\"${this.ownScoreParam}\"}`,
-			"method": "POST",
-			"mode": "cors",
-			"credentials": "include"
-		})
+		fetch("https://my.nikkis.info/getguide/ln", fetchData(null, `{\"stage\":\"${this.ownScoreParam}\"}`))
 		.then(r => r.text())
 		.then(result => {
 			console.log(`Tried stage: ${this.ownScoreParam}`);
 			const initialResult = JSON.parse(result); // {guide: {wardrobe: {...}, score: "128,000"}
 			this.newItems = this.getNumNewItems(initialResult.guide.wardrobe);
+
 			const score = initialResult.guide.score; // "128,000"
 			const scoreAsNum = this.parseNum(score); // "128,000" -> "128000" -> 128000
 			this.ownScore = scoreAsNum;
-			
-			storageSet(`${this.ownScoreParam}_newItems`, this.newItems);
-			storageSet(`${this.ownScoreParam}_maxBaseScore`, this.maxBaseScore);
-			storageSet(`${this.ownScoreParam}_ownScore`, this.ownScore);
-			storageSet(`${this.ownScoreParam}_lastRefreshed`, now.toString());
-			callback(renderRow(this.createChapterLink(), this.newItems, this.maxBaseScore, this.ownScore, now))
+
+			const storedValue = {nI: this.newItems, mBS: this.maxBaseScore/1000, oS: this.ownScore/1000}
+			this.cacheCallback(this.ownScoreParam, storedValue);
+			callback(renderRow(this.createChapterLink(), this.newItems, this.maxBaseScore / 1000, this.ownScore / 1000, now))
 			$.bootstrapSortable({ applyLast: true })
 		})
 		.catch((error) => console.log(`Failed to get own chapter score on ${this.stageParam}: ${error}`));
@@ -170,32 +187,26 @@ class Chapter {
 
 	getData = (callback) => {
 		this.getChapterTopScore(() => this.getChapterOwnScore(callback));
-		// getChapterExpertScore(callBack);
 	}
 
-	addRow = (callback) => {
-		storageGet(`${this.ownScoreParam}_lastRefreshed`, (lastRefreshed) => {
-			if (lastRefreshed) {
-				const lastRefreshedAsDate = Date.parse(lastRefreshed);
-				const daysSinceLastRefreshed = (now - lastRefreshedAsDate) / (1000 * 60 * 60 * 24);
-				if (daysSinceLastRefreshed <= 5) {
-					console.log("I am inside here")
-					const newItemsKey = `${this.ownScoreParam}_newItems`;
-					const maxBaseScoreKey = `${this.ownScoreParam}_maxBaseScore`;
-					const ownScoreKey = `${this.ownScoreParam}_ownScore`;
-					return storageGetMultiple([newItemsKey, maxBaseScoreKey, ownScoreKey],
-						(result) => {
-							callback(renderRow(this.createChapterLink(), result[newItemsKey], result[maxBaseScoreKey], result[ownScoreKey], lastRefreshedAsDate));
-							$.bootstrapSortable({ applyLast: true })
-						});
-				}
-			}
-			this.getData(callback);
-		});
+	addRow = (callback, storedValue) => {
+		callback(renderRow(this.createChapterLink(), storedValue.nI, storedValue.mBS, storedValue.oS));
+		$.bootstrapSortable({ applyLast: true })
 	}
 }
 
-const renderRow = (chapterLink, newItems, maxBaseScore, ownScore, lastUpdated) => {
+renderRefreshButton = (ownScoreParam) => {
+	const refreshLink = document.createElement('a');
+	const refreshLinkEmoji = document.createElement('span');
+	refreshLinkEmoji.innerHTML = ' &#x1F504';
+	refreshLink.appendChild(refreshLinkEmoji);  
+	refreshLink.title = "Refresh";
+	refreshLinkEmoji.onClick = () =>clearAllAndRefresh(ownScoreParam);
+	refreshLink.onClick = () => clearAllAndRefresh(ownScoreParam);
+	return refreshLink;
+}
+
+const renderRow = (chapterLink, newItems, maxBaseScore, ownScore) => {
 	var tableRow = document.createElement('tr');
 	var cell1 = document.createElement('th');
 	cell1.scope = "row";
@@ -204,20 +215,17 @@ const renderRow = (chapterLink, newItems, maxBaseScore, ownScore, lastUpdated) =
 	var cell2 = document.createElement('td');
 	cell2.innerText = newItems;
 	var cell3 = document.createElement('td');
-	cell3.innerText = maxBaseScore;
+	cell3.innerText = maxBaseScore * 1000;
 	var cell4 = document.createElement('td');
-	cell4.innerText = ownScore;
+	cell4.innerText = ownScore * 1000;
 	var cell5 = document.createElement('td');
-	cell5.innerText = maxBaseScore - ownScore;
-	var cell6 = document.createElement('td');
-	cell6.innerText = timeSince(lastUpdated);
+	cell5.innerText = (maxBaseScore - ownScore) * 1000;
 
 	tableRow.appendChild(cell1);
 	tableRow.appendChild(cell2);
 	tableRow.appendChild(cell3);
 	tableRow.appendChild(cell4);
 	tableRow.appendChild(cell5);
-	tableRow.appendChild(cell6);
 	return tableRow;
 }
 
@@ -246,26 +254,7 @@ function timeSince(date) {
 	return Math.floor(seconds) + " seconds ago";
 }
 
-function renderTable() {
-	const tableContent = document.getElementById('tableContent');
-
-	// const chPV2_6 = new Chapter(2, 4, 1, true, false);
-	// chPV2_6.getData((row) => tableContent.append(row));
-
-	const chPV1_23 = new Chapter(1, 2, 3, true, false);
-	chPV1_23.addRow((row) => tableContent.append(row));
-
-	const maidenV263 = new Chapter(2, 6, 6, false, false);
-	maidenV263.addRow((row) => tableContent.append(row));
-
-	const commission = new Chapter(1, 14, 3, true, true);
-	commission.addRow((row) => tableContent.append(row));
-
-	// render columns
-	// for (var i = 0; i < columns.length; i++) {
-	// 	var column = document.createElement('div');
-	// 	column.className = 'column';
-	// 	column.style.width = (1 / columns.length) * 100 + '%';
-	// }
-}
-renderTable();
+tableContent = document.getElementById('tableContent');
+const table = new Table(tableContent);
+table.renderTable();
+storageSet('nikki-ranking', table.cache);

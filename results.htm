@@ -10,11 +10,22 @@
   </head>
   <body>
     <div class="container">
-      <h1>Nikki Ranking Helper</h1>
-      <p class="lead">Basic grid layouts to get you familiar with building within the Bootstrap grid system.</p>
+      <p><h1>Nikki Ranking Helper</h1></p>
+      <p class="lead">Little helper to help you figure out which stages to rank on next.</p>
 
-      <h3>Five grid tiers</h3>
-      <p>There are five tiers to the Bootstrap grid system, one for each range of devices we support. Each tier starts at a minimum viewport size and automatically applies to the larger devices unless overridden.</p>
+      <h3>Columns</h3>
+      <ul>
+        <li><b>New Items: </b>Number of new items compared to your last saved wardrobe on this stage.</li>
+        <li><b>Max Base Score: </b>Maximum base score according to NI.</li>
+        <li><b>Own Score: </b>Your base score for this stage.</li>
+        <li><b>Difference: </b>Difference between the max base score and your score (<u>lower is better!</u>).</li>
+      </ul>
+
+      <h3>Last Updated</h3>
+      <ul>
+        <li>When we last pulled the data from NI. To avoid overwhelming her servers, this tool only automatically refreshes every 5 days.</li>
+        <li id="last-updated"></li>
+      </ul>
 
       <div class="main">
         <table class="table sortable">
@@ -25,7 +36,6 @@
               <th scope="col">Max Base Score</th>
               <th scope="col">Own Score</th>
               <th scope="col">Difference</th>
-              <th scope="col">Last Updated</th>
             </tr>
           </thead>
           <tbody class="tableContent" id="tableContent">
